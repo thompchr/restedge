@@ -1,5 +1,6 @@
 package controllers;
 
+import org.apache.commons.lang3.StringUtils;
 import play.Logger;
 import play.libs.F;
 import play.libs.Json;
@@ -19,8 +20,9 @@ import java.util.Map;
 public class EdgeProxy extends Controller {
     protected static Map<String, CachedResponse> _responseCache = new HashMap<String, CachedResponse>();
 
-//    public static String PROXIED_HOST = "www.cnn.com";
-    public static String PROXIED_HOST = "https://st-dev.optiolabshq.com";
+    //public static String PROXIED_HOST = "http://www.cnn.com";
+    //    public static String PROXIED_HOST = "https://st-dev.optiolabshq.com";
+    public static String PROXIED_HOST = "https://mydemo.vistage.com";
 
     public static void initEdgeProxy() {
         _responseCache.put("GET /time", new CachedResponse("GET /time", "{\"name\":\"tipsy\"}", Http.Status.CREATED, "application/json"));
@@ -37,26 +39,37 @@ public class EdgeProxy extends Controller {
         String request = request().toString();
         Logger.info("EdgeProxy-ing " + request);
         Logger.info("EdgeProxy cache" + _responseCache);
-        if (_responseCache.containsKey(request)) {
-            Logger.info("found cached EdgeProxy-ing " + request);
-            CachedResponse resp = (CachedResponse) _responseCache.get(request);
-            if (resp.responseContentType=="application/json") {
-                Logger.info(" cached EdgeProxy-ing json response " + Json.parse(resp.responseValue));
-                return status(resp.responseStatus, Json.parse(resp.responseValue));
-            } else {
-                Logger.info(" cached EdgeProxy-ing text/html response " + resp.responseValue);
-                response().setContentType("text/html");
-                return status(resp.responseStatus, resp.responseValue);
+
+
+        Result r = null;
+        try {
+            r = forwardRequest().get(3000l);
+        } catch (Throwable e) {
+            if (_responseCache.containsKey(request)) {
+                Logger.info("found cached EdgeProxy-ing " + request);
+                CachedResponse resp = _responseCache.get(request);
+                if (resp.responseContentType == "application/json") {
+                    Logger.info(" cached EdgeProxy-ing json response " + Json.parse(resp.responseValue));
+                    r = status(resp.responseStatus, Json.parse(resp.responseValue));
+                } else {
+                    Logger.info(" cached EdgeProxy-ing text/html response " + resp.responseValue);
+                    response().setContentType("text/html");
+                    r = status(resp.responseStatus, resp.responseValue);
+                }
+            }
+
+            if (r == null) {
+                r = notFound();
             }
         }
-        return forwardRequest().get(1500l);
+        return r;
     }
 
     public static F.Promise<Result> forwardRequest() {
         Logger.info("forwarding proxied request " + Json.toJson(request().headers()));
         WSRequestHolder holder = WS.url(PROXIED_HOST + request().path());
-        for (String key : request().headers().keySet()){
-            for (int i = 0; i < request().headers().get(key).length; ++i){
+        for (String key : request().headers().keySet()) {
+            for (int i = 0; i < request().headers().get(key).length; ++i) {
                 holder.setHeader(key, request().headers().get(key)[i]);
             }
         }
@@ -73,16 +86,21 @@ public class EdgeProxy extends Controller {
                         );
 
                         //Logger.info("Added response to cache " + resp.requestMatch);
-                        if (request().accepts("text/html")) {
-                            resp.responseContentType = "text/html";
-                            response().setContentType("text/html");
-                        } else if (request().accepts("application/json")) {
-                            response().setContentType("application/json");
-                        } else {
-                            return notFound();
+                        Logger.debug("Response headers are " + response.getAllHeaders());
+                        for (String key : response.getAllHeaders().keySet()) {
+                            final String val = StringUtils.join(response.getAllHeaders().get(key), ";");
+                            response().setHeader(key, val);
                         }
-                        _responseCache.put(request().method() + " " + request().path(), resp);
-                        return status(response.getStatus(), response.getBody());
+//                        if (request().accepts("text/html")) {
+//                            resp.responseContentType = "text/html";
+//                            response().setContentType("text/html");
+//                        } else if (request().accepts("application/json")) {
+//                            response().setContentType("application/json");
+//                        } else {
+//                            return notFound();
+//                        }
+//                        _responseCache.put(request().method() + " " + request().path(), resp);
+                        return status(response.getStatus(), response.getBody()).as(response.getHeader("Content-Type"));
                     }
                 }
         );
