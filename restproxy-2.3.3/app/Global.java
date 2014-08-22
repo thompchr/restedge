@@ -1,3 +1,4 @@
+import controllers.EdgeProxy;
 import play.Application;
 import play.GlobalSettings;
 import play.Logger;
@@ -9,6 +10,7 @@ import play.mvc.Result;
 
 import java.lang.reflect.Method;
 
+
 /**
  * Created by skircher on 8/21/14.
  */
@@ -17,6 +19,7 @@ public class Global extends GlobalSettings {
     @Override
     public void beforeStart(Application application) {
         controllers.EdgeProxy.initEdgeProxy();
+        System.out.println("proxied host =" + EdgeProxy.PROXIED_HOST);
         super.beforeStart(application);
     }
 
@@ -24,7 +27,7 @@ public class Global extends GlobalSettings {
     public F.Promise<Result> onHandlerNotFound(Http.RequestHeader requestHeader) {
         Logger.info(requestHeader.toString());
         System.out.println("no handler found for... " + requestHeader.path() + " for " + requestHeader.uri());
-        return F.Promise.<Result>pure((Result)controllers.EdgeProxy.serviceRequest());
+        return F.Promise.pure(controllers.EdgeProxy.serviceRequest());
     }
 
     @Override
