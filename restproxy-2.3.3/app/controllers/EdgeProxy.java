@@ -1,5 +1,6 @@
 package controllers;
 
+import org.apache.commons.lang3.StringUtils;
 import org.joda.time.DateTime;
 import play.Logger;
 import play.libs.F;
@@ -23,6 +24,7 @@ public class EdgeProxy extends Controller {
     //    public static String PROXIED_HOST = "www.cnn.com";
     public static String PROXIED_HOST = "https://st-dev.optiolabshq.com";
     //public static String PROXIED_HOST = "http://localhost:9001";
+    //public static String PROXIED_HOST = "https://mydemo.vistage.com";
 
     public static void initEdgeProxy() {
         _responseCache.put("GET " + PROXIED_HOST + "/time", new CachedResponse("GET " + PROXIED_HOST + "/time", "{\"name\":\"tipsy\"}", Http.Status.OK, "application/json"));
@@ -34,12 +36,13 @@ public class EdgeProxy extends Controller {
         //@ApiParam(value = "tag's name", required = true) @PathParam("name") String name) {
         //request().headers().put("X-Forwarded-Host",new String[]{request().host()});
 
-        Logger.info("host= " + Json.toJson(request().host()));
+        Logger.info("host= " + request().host());
         Logger.info("headers = " + Json.toJson(request().headers()));
-        String request = request().toString();
+        String request = getCacheKeyFromRequest();
         Logger.info("EdgeProxy-ing " + request);
         Logger.info("EdgeProxy cache" + _responseCache);
-        if (_responseCache.containsKey(request)) {
+
+        if (_responseCache.containsKey(getCacheKeyFromRequest())) {
             Logger.info("found cached EdgeProxy-ing " + request);
             CachedResponse resp = (CachedResponse) _responseCache.get(getCacheKeyFromRequest());
             if (!resp.expired(10000)) {
@@ -54,6 +57,13 @@ public class EdgeProxy extends Controller {
                 }
             }
         }
+        //TODO: need to break infinite looping of host = proxied host
+        if ( !request().host().isEmpty() &&
+                 PROXIED_HOST.contains(request().host())) {
+            Logger.info("Host ["+request().host()+"] and proxied host ["+ PROXIED_HOST +"] cannot be the same");
+            return notFound("Host and proxied host cannot be the same");
+        }
+
         return forwardRequest();
     }
 
@@ -77,7 +87,7 @@ public class EdgeProxy extends Controller {
                 if (resp.responseContentType == "application/json") {
                     Logger.info(" cached EdgeProxy-ing json response " + Json.parse(resp.responseValue));
                     return status(resp.responseStatus, Json.parse(resp.responseValue));
-                } else {
+                } else if (resp.responseContentType == "text/html") {
                     Logger.info(" cached EdgeProxy-ing text/html response " + resp.responseValue);
                     response().setContentType("text/html");
                     return status(resp.responseStatus, resp.responseValue);
@@ -87,7 +97,7 @@ public class EdgeProxy extends Controller {
         return notFound("Cached response not found");
     }
 
-    public static Result forwardRequest() {
+    public static Result forwardRequest()  {
         Logger.info("forwarding proxied request " + PROXIED_HOST + request().path());
         //Logger.info("forwarding proxied request " + Json.toJson(request().headers()));
         final WSRequestHolder holder = WS.url(PROXIED_HOST + request().path());
@@ -95,13 +105,16 @@ public class EdgeProxy extends Controller {
             for (int i = 0; i < request().headers().get(key).length; ++i) {
                 holder.setHeader(key, request().headers().get(key)[i]);
             }
+            //holder.setHeader("Authorization","7a3443a94d34385356a388f0609acf6ec245b057f096534dfb3a133fb3d3ce17628af42438b0788d56ad2ae2dc6a3c1defcbf8976866e4600c03e74971b326e6");
         }
         try {
+            // Forward the request to the PROXIED_HOST
             final F.Promise<Result> resultPromise = holder.get().map(
                     new F.Function<WSResponse, Result>() {
                         public Result apply(WSResponse response) {
                             // need original request.  put in header?
                             if (response.getStatus() >= 400) {
+                                Logger.info("Error status ["+ response.getStatusText() +"] from proxied request " + holder.getUrl() );
                                 return getCachedResponse();
                             }
 
@@ -111,24 +124,24 @@ public class EdgeProxy extends Controller {
                                     response.getStatus(),
                                     "application/json"
                             );
-
-                            if (request().accepts("application/json")) {
-                                response().setContentType("application/json");
-//                            } else if (request().accepts("text/html")) {
-//                                resp.responseContentType = "text/html";
-//                                response().setContentType("text/html");
-                            } else {
-                                return notFound();
+                            Logger.debug("Response headers are " + response.getAllHeaders());
+                            for (String key : response.getAllHeaders().keySet()) {
+                                final String val = StringUtils.join(response.getAllHeaders().get(key), ";");
+                                response().setHeader(key, val);
                             }
-                            _responseCache.put(request().method() + " " + request().path(), resp);
-                            return status(response.getStatus(), response.getBody());
+                            _responseCache.put(getCacheKeyFromRequest(), resp);
+                            Logger.debug("Cached Response for ["+ holder.getUrl() +"] from proxied request " + holder.getUrl());
+                            return status(response.getStatus(), response.getBody()).as(response.getHeader("Content-Type"));
                         }
-                    }
-            );
 
-            return resultPromise.get(20001);
+                    }
+
+            );
+            return resultPromise.get(5000l);
+
         } catch (Exception proxyError) {
-            return getCachedResponse(holder.getUrl());
+            Logger.info("Exception "+ proxyError.getMessage() +" from proxied request " + holder.getUrl());
+            return getCachedResponse();
         }
     }
 }

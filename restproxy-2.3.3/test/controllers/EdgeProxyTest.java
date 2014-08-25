@@ -4,6 +4,7 @@ import junit.framework.TestCase;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import play.Logger;
 import play.mvc.Result;
 import play.test.FakeApplication;
 import play.test.FakeRequest;
@@ -45,9 +46,9 @@ public class EdgeProxyTest extends TestCase {
                 Result result = EdgeProxy.getCachedResponse("GET http://localhost:9001/time");
                 assertThat(status(result)).isEqualTo(OK);
                 result = EdgeProxy.getCachedResponse("PUT http://localhost:9001/trial");
-                assertThat(contentType(result)).isEqualTo("application/json");
+                assertThat(contentAsString(result, 2000).contains("{\"name\":\"turvey\"}"));
                 assertThat(status(result)).isEqualTo(CREATED);
-                assertThat(contentType(result)).isEqualTo("application/json");
+                Logger.info(" content = " + contentAsString(result));
             }
         });
     }

@@ -1,4 +1,5 @@
 import controllers.Application;
+import junit.framework.TestCase;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -24,7 +25,7 @@ import static play.test.Helpers.*;
  * If you are interested in mocking a whole application, see the wiki for more details.
  */
 @RunWith(MockitoJUnitRunner.class)
-public class ApplicationTest {
+public class ApplicationTest extends TestCase {
     public static FakeApplication app;
     @Mock
     private Http.Request request;
