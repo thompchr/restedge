@@ -27,9 +27,9 @@ public class EdgeProxy extends Controller {
     //public static String PROXIED_HOST = "https://mydemo.vistage.com";
 
     public static void initEdgeProxy() {
-        _responseCache.put("GET " + PROXIED_HOST + "/time", new CachedResponse("GET " + PROXIED_HOST + "/time", "{\"name\":\"tipsy\"}", Http.Status.OK, "application/json"));
-        _responseCache.put("PUT " + PROXIED_HOST + "/trial", new CachedResponse("PUT " + PROXIED_HOST + "/trial", "{\"name\":\"turvey\"}", Http.Status.CREATED, "application/json"));
-        _responseCache.put("GET /forward1", new CachedResponse("PUT /trial", "{\"name\":\"forwarded request\"}", Http.Status.OK, "application/json"));
+//        _responseCache.put("GET " + PROXIED_HOST + "/time", new CachedResponse("GET " + PROXIED_HOST + "/time", "{\"name\":\"tipsy\"}", Http.Status.OK, "application/json"));
+//        _responseCache.put("PUT " + PROXIED_HOST + "/trial", new CachedResponse("PUT " + PROXIED_HOST + "/trial", "{\"name\":\"turvey\"}", Http.Status.CREATED, "application/json"));
+//        _responseCache.put("GET /forward1", new CachedResponse("PUT /trial", "{\"name\":\"forwarded request\"}", Http.Status.OK, "application/json"));
     }
 
     public static Result serviceRequest() {

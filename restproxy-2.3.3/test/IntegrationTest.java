@@ -1,4 +1,5 @@
 import controllers.EdgeProxy;
+import controllers.EdgeProxyTest;
 import org.junit.*;
 
 import play.mvc.*;
@@ -27,6 +28,13 @@ public class IntegrationTest {
     @Test
     public void testFoundCachedPath() {
         EdgeProxy.PROXIED_HOST = "http://localhost:3333";
+        try {
+            EdgeProxyTest t = new EdgeProxyTest();
+            t.setUp();
+        } catch (Exception setUpEx) {
+            assertThat(false==true);
+        }
+
         running(testServer(3333, fakeApplication(inMemoryDatabase())), HTMLUNIT, new Callback<TestBrowser>() {
             public void invoke(TestBrowser browser) {
                 browser.goTo("http://localhost:3333/time");

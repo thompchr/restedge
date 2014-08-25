@@ -5,6 +5,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import play.Logger;
+import play.mvc.Http;
 import play.mvc.Result;
 import play.test.FakeApplication;
 import play.test.FakeRequest;
@@ -24,6 +25,8 @@ public class EdgeProxyTest extends TestCase {
     @Before
     public void setUp() throws Exception {
         EdgeProxy.PROXIED_HOST = "http://localhost:9001";
+        EdgeProxy._responseCache.put("GET " + EdgeProxy.PROXIED_HOST + "/time", new CachedResponse("GET " + EdgeProxy.PROXIED_HOST  + "/time", "{\"name\":\"tipsy\"}", Http.Status.OK, "application/json"));
+        EdgeProxy._responseCache.put("PUT " + EdgeProxy.PROXIED_HOST  + "/trial", new CachedResponse("PUT " + EdgeProxy.PROXIED_HOST  + "/trial", "{\"name\":\"turvey\"}", Http.Status.CREATED, "application/json"));
 //        Map<String, String> flashData = Collections.emptyMap();
 //        Map<String, Object> argData = Collections.emptyMap();
 //        Long id = 2L;
@@ -31,7 +34,7 @@ public class EdgeProxyTest extends TestCase {
 //        Http.Context context = new Http.Context(id, header, request, flashData, flashData, argData);
 //        Http.Context.current.set(context);
     }
-
+//
 //    @BeforeClass
 //    public static void startApp() {
 //        app = Helpers.fakeApplication();
@@ -42,7 +45,6 @@ public class EdgeProxyTest extends TestCase {
     public void testGetCachedResponse() throws Exception {
         running(fakeApplication(), new Runnable() {
             public void run() {
-                EdgeProxy.initEdgeProxy();
                 Result result = EdgeProxy.getCachedResponse("GET http://localhost:9001/time");
                 assertThat(status(result)).isEqualTo(OK);
                 result = EdgeProxy.getCachedResponse("PUT http://localhost:9001/trial");
@@ -57,7 +59,6 @@ public class EdgeProxyTest extends TestCase {
     public void testServiceRequest() {
         running(fakeApplication(), new Runnable() {
                     public void run() {
-                        EdgeProxy.initEdgeProxy();
                         EdgeProxy.PROXIED_HOST = "https://st-dev.optiolabshq.com";
                         FakeRequest fakeRequest = new FakeRequest(GET, "/v1/frontend/device/bfe903fc-5730-3edf-983a-58a3fa109fd5");
                         fakeRequest.withHeader("Authorization", "7a3443a94d34385356a388f0609acf6ec245b057f096534dfb3a133fb3d3ce17628af42438b0788d56ad2ae2dc6a3c1defcbf8976866e4600c03e74971b326e6");
@@ -76,7 +77,6 @@ public class EdgeProxyTest extends TestCase {
     public void testServiceRequestDoesntExist() {
         running(fakeApplication(), new Runnable() {
                     public void run() {
-                        EdgeProxy.initEdgeProxy();
                         EdgeProxy.PROXIED_HOST = "https://doesntexist";
                         FakeRequest fakeRequest = new FakeRequest(GET, "/neverfindthis");
                         Result result = callAction(
@@ -87,7 +87,5 @@ public class EdgeProxyTest extends TestCase {
                 }
         );
     }
-
-
 
 }
