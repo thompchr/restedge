@@ -27,16 +27,16 @@ public class IntegrationTest {
 
     @Test
     public void testFoundCachedPath() {
-        EdgeProxy.PROXIED_HOST = "http://localhost:3333";
-        try {
-            EdgeProxyTest t = new EdgeProxyTest();
-            t.setUp();
-        } catch (Exception setUpEx) {
-            assertThat(false==true);
-        }
 
         running(testServer(3333, fakeApplication(inMemoryDatabase())), HTMLUNIT, new Callback<TestBrowser>() {
             public void invoke(TestBrowser browser) {
+                EdgeProxy.PROXIED_HOST = "http://localhost:3333";
+                try {
+                    EdgeProxyTest t = new EdgeProxyTest();
+                    t.setUp();
+                } catch (Exception setUpEx) {
+                    Assert.fail("Problem encountered during test setup");
+                }
                 browser.goTo("http://localhost:3333/time");
                 assertThat(browser.pageSource()).contains("{\"name\":\"tipsy\"}");
             }
@@ -44,9 +44,9 @@ public class IntegrationTest {
     }
     @Test
     public void testNotFoundCachedPath() {
-        EdgeProxy.PROXIED_HOST = "http://localhost:3334";
         running(testServer(3333, fakeApplication(inMemoryDatabase())), HTMLUNIT, new Callback<TestBrowser>() {
             public void invoke(TestBrowser browser) {
+                EdgeProxy.PROXIED_HOST = "http://localhost:3334";
                 browser.goTo("http://localhost:3333/notfoundwhatsoever");
                 assertThat(browser.pageSource()).contains("Cached response not found");
         }
@@ -55,9 +55,9 @@ public class IntegrationTest {
 
     @Test
     public void testHostEqualsProxiedHost() {
-        EdgeProxy.PROXIED_HOST = "http://localhost:3333";
         running(testServer(3333, fakeApplication(inMemoryDatabase())), HTMLUNIT, new Callback<TestBrowser>() {
             public void invoke(TestBrowser browser) {
+                EdgeProxy.PROXIED_HOST = "http://localhost:3333";
                 browser.goTo("http://localhost:3333/notfoundwhatsoever");
                 assertThat(browser.pageSource()).contains("Host and proxied host cannot be the same");
             }

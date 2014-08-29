@@ -3,9 +3,11 @@ package controllers;
 import org.apache.commons.lang3.StringUtils;
 import org.joda.time.DateTime;
 import play.Logger;
+import play.Play;
 import play.libs.F;
 import play.libs.Json;
 import play.libs.ws.WS;
+import play.libs.ws.WSRequest;
 import play.libs.ws.WSRequestHolder;
 import play.libs.ws.WSResponse;
 import play.mvc.Controller;
@@ -26,10 +28,25 @@ public class EdgeProxy extends Controller {
     //public static String PROXIED_HOST = "http://localhost:9001";
     //public static String PROXIED_HOST = "https://mydemo.vistage.com";
 
-    public static void initEdgeProxy() {
-//        _responseCache.put("GET " + PROXIED_HOST + "/time", new CachedResponse("GET " + PROXIED_HOST + "/time", "{\"name\":\"tipsy\"}", Http.Status.OK, "application/json"));
-//        _responseCache.put("PUT " + PROXIED_HOST + "/trial", new CachedResponse("PUT " + PROXIED_HOST + "/trial", "{\"name\":\"turvey\"}", Http.Status.CREATED, "application/json"));
-//        _responseCache.put("GET /forward1", new CachedResponse("PUT /trial", "{\"name\":\"forwarded request\"}", Http.Status.OK, "application/json"));
+    public static boolean initEdgeProxy() {
+        /**
+         * Configure default proxy based on environment, this can be programmatically overriden
+         * for testing purposes
+         */
+        StringBuilder sb = new StringBuilder("restedge.default.proxy.");
+        if (Play.isDev()) {
+            sb.append("dev");
+        } else if (Play.isTest()) {
+            sb.append("stage");
+        } else if (Play.isProd()) {
+            sb.append("prod");
+        }
+        PROXIED_HOST = Play.application().configuration().getString(sb.toString());
+        if (PROXIED_HOST.isEmpty()) {
+            Logger.warn("DEFAULT PROXIED HOST IS EMPTY");
+            return false;
+        }
+        return true;
     }
 
     public static Result serviceRequest() {
@@ -57,10 +74,10 @@ public class EdgeProxy extends Controller {
                 }
             }
         }
-        //TODO: need to break infinite looping of host = proxied host
-        if ( !request().host().isEmpty() &&
-                 PROXIED_HOST.contains(request().host())) {
-            Logger.info("Host ["+request().host()+"] and proxied host ["+ PROXIED_HOST +"] cannot be the same");
+        //break infinite looping of host = proxied host
+        if (!request().host().isEmpty() &&
+                PROXIED_HOST.contains(request().host())) {
+            Logger.info("Host [" + request().host() + "] and proxied host [" + PROXIED_HOST + "] cannot be the same");
             return notFound("Host and proxied host cannot be the same");
         }
 
@@ -75,11 +92,13 @@ public class EdgeProxy extends Controller {
                 toString();
     }
 
-    public static Result getCachedResponse() {
-        return getCachedResponse(getCacheKeyFromRequest());
-    }
+    public static Result getCachedResponse() { return getCachedResponse(getCacheKeyFromRequest()); }
 
-    public static Result getCachedResponse(String key) {
+    public static Result getCachedResponse(int proxiedStatus) { return getCachedResponse(getCacheKeyFromRequest(), proxiedStatus); }
+
+    public static Result getCachedResponse(String key) { return getCachedResponse(key, Http.Status.SERVICE_UNAVAILABLE);}
+
+    public static Result getCachedResponse(String key, int proxiedStatus) {
         if (_responseCache != null) {
             if (_responseCache.containsKey(key)) {
                 Logger.info("found cached EdgeProxy-ing " + key);
@@ -94,10 +113,10 @@ public class EdgeProxy extends Controller {
                 }
             }
         }
-        return notFound("Cached response not found");
+        return status(proxiedStatus, "Cached response not found");
     }
 
-    public static Result forwardRequest()  {
+    public static Result forwardRequest() {
         Logger.info("forwarding proxied request " + PROXIED_HOST + request().path());
         //Logger.info("forwarding proxied request " + Json.toJson(request().headers()));
         final WSRequestHolder holder = WS.url(PROXIED_HOST + request().path());
@@ -105,7 +124,6 @@ public class EdgeProxy extends Controller {
             for (int i = 0; i < request().headers().get(key).length; ++i) {
                 holder.setHeader(key, request().headers().get(key)[i]);
             }
-            //holder.setHeader("Authorization","7a3443a94d34385356a388f0609acf6ec245b057f096534dfb3a133fb3d3ce17628af42438b0788d56ad2ae2dc6a3c1defcbf8976866e4600c03e74971b326e6");
         }
         try {
             // Forward the request to the PROXIED_HOST
@@ -113,34 +131,45 @@ public class EdgeProxy extends Controller {
                     new F.Function<WSResponse, Result>() {
                         public Result apply(WSResponse response) {
                             // need original request.  put in header?
+
                             if (response.getStatus() >= 400) {
-                                Logger.info("Error status ["+ response.getStatusText() +"] from proxied request " + holder.getUrl() );
-                                return getCachedResponse();
+                                Logger.info("Error status [" + response.getStatusText() + "] from proxied request " + holder.getUrl());
+                                return getCachedResponse(response.getStatus());
+                            }
+                            /**
+                             * Check the content type of the response.  Current policy is that only JSON types are supported.  Other types should not be
+                             * cached. u
+                             */
+                            if (!response.getHeader(Http.HeaderNames.CONTENT_TYPE).contains(Http.MimeTypes.JSON)) {
+                                //TODO: Remove
+                                Logger.warn("Response contains unsupported mediatype: " + response.getHeader(Http.HeaderNames.CONTENT_TYPE));
+                                return status(UNSUPPORTED_MEDIA_TYPE, "Response contains an unsupported media type [" + response.getHeader(Http.HeaderNames.CONTENT_TYPE) + "]");
                             }
 
+                            //TODO: get request and response headers into a string to cache
                             CachedResponse resp = new CachedResponse(
                                     request().toString(),
                                     response.getBody(),
                                     response.getStatus(),
                                     "application/json"
                             );
+
                             Logger.debug("Response headers are " + response.getAllHeaders());
                             for (String key : response.getAllHeaders().keySet()) {
                                 final String val = StringUtils.join(response.getAllHeaders().get(key), ";");
                                 response().setHeader(key, val);
                             }
                             _responseCache.put(getCacheKeyFromRequest(), resp);
-                            Logger.debug("Cached Response for ["+ holder.getUrl() +"] from proxied request " + holder.getUrl());
-                            return status(response.getStatus(), response.getBody()).as(response.getHeader("Content-Type"));
+                            Logger.debug("Cached Response for [" + holder.getUrl() + "] from proxied request " + holder.getUrl());
+                            return status(response.getStatus(), response.getBody()).as(Http.MimeTypes.JSON);
                         }
 
                     }
-
             );
             return resultPromise.get(5000l);
 
         } catch (Exception proxyError) {
-            Logger.info("Exception "+ proxyError.getMessage() +" from proxied request " + holder.getUrl());
+            Logger.info("Exception " + proxyError.getMessage() + " from proxied request " + holder.getUrl());
             return getCachedResponse();
         }
     }

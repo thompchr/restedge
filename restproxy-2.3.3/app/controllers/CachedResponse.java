@@ -8,6 +8,7 @@ import play.Logger;
 /**
  * Created by skircher on 8/19/14.
  */
+// TODO: Add storage of request and response headers
 public class CachedResponse {
     public String   requestMatch;
     public String   responseValue;
